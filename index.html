@@ -21,8 +21,8 @@
     font-family: "Avenir Next", "Segoe UI", Helvetica, Arial, sans-serif;
     padding: 2.5vh 3vw;
     display: grid;
-    grid-template-rows: auto 1fr auto;
-    gap: 2.5vh;
+    grid-template-rows: auto auto 1fr auto;
+    gap: 1.6vh;
     overflow: hidden;
   }
   header { display: flex; justify-content: space-between; align-items: baseline; }
@@ -32,16 +32,16 @@
 
   main { display: grid; grid-template-columns: 1.1fr 1fr; gap: 3vw; min-height: 0; }
   .now { display: flex; flex-direction: column; justify-content: center; }
-  .now .icon { font-size: clamp(5rem, 16vw, 14rem); line-height: 1; }
-  .now .temp { font-size: clamp(5rem, 14vw, 12rem); font-weight: 300; line-height: 1; margin-top: 1vh; }
+  .now .icon { font-size: clamp(4rem, 12vw, 10rem); line-height: 1; }
+  .now .temp { font-size: clamp(4rem, 11vw, 9rem); font-weight: 300; line-height: 1; margin-top: 1vh; }
   .now .desc { font-size: clamp(1.4rem, 3vw, 2.6rem); color: var(--accent); margin-top: 1vh; }
-  .now .meta { display: flex; gap: 1.2vw; margin-top: 2vh; color: var(--ink); font-size: clamp(1rem, 1.8vw, 1.6rem); flex-wrap: wrap; }
+  .now .meta { display: flex; gap: 1.2vw; margin-top: 2vh; color: var(--ink); font-size: clamp(0.9rem, 1.5vw, 1.4rem); flex-wrap: wrap; }
   .now .meta span { background: var(--panel); padding: 0.6vh 1.2vw; border-radius: 999px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 
   .days { display: flex; flex-direction: column; gap: 1.2vh; justify-content: center; }
   .day {
     display: grid; grid-template-columns: 1.2fr 0.8fr 1fr 1fr; align-items: center;
-    background: var(--panel); border-radius: 14px; padding: 1.4vh 1.6vw;
+    background: var(--panel); border-radius: 14px; padding: 1vh 1.6vw;
     font-size: clamp(1rem, 2vw, 1.8rem);
   }
   .day .ic { font-size: 1.6em; }
@@ -62,12 +62,24 @@
   .hour { border-top-color: rgba(255, 255, 255, 0.25); }
   .wi { width: 1em; height: 1em; display: inline-block; vertical-align: middle; }
   .now .icon .wi { display: block; }
+  .tip { display: flex; gap: 1.2vw; flex-wrap: wrap; font-size: clamp(1rem, 1.9vw, 1.7rem); }
+  .tip span { background: var(--panel); border-radius: 999px; padding: 0.7vh 1.4vw; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  .right { display: flex; flex-direction: column; gap: 1.2vh; justify-content: center; }
+  .card { background: var(--panel); border-radius: 14px; padding: 1.2vh 1.6vw; display: flex; align-items: center; gap: 1.5vw; font-size: clamp(0.9rem, 1.6vw, 1.4rem); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  .times { display: flex; justify-content: space-between; color: var(--muted); }
+  .dot { display: inline-block; width: 0.7em; height: 0.7em; border-radius: 50%; margin-right: 0.4em; }
+  .arrow { width: 1em; height: 1em; vertical-align: -0.12em; margin-left: 0.3em; }
+  .hours-wrap { position: relative; }
+  #graph { width: 100%; height: 11vh; display: block; }
+  #dim { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 5; transition: opacity 3s; }
+  body > header, body > .tip, body > main, body > .hours-wrap { transform: translate(var(--sx, 0px), var(--sy, 0px)); transition: transform 3s; }
   #status { position: fixed; right: 1vw; bottom: 0.6vh; font-size: 0.75rem; color: var(--muted); }
 
   @media (max-width: 800px) {
     body { overflow: auto; }
     main { grid-template-columns: 1fr; }
     .hours { grid-template-columns: repeat(4, 1fr); }
+    #graph { display: none; }
   }
 </style>
 </head>
@@ -78,6 +90,7 @@
     <div id="place"></div>
     <div id="clock"></div>
   </header>
+  <div class="tip" id="tip"></div>
 
   <main>
     <section class="now">
@@ -86,10 +99,11 @@
       <div class="desc" id="desc">Loading</div>
       <div class="meta" id="meta"></div>
     </section>
-    <section class="days" id="days"></section>
+    <section class="right"><div class="days" id="days"></div><div class="card" id="sun"></div></section>
   </main>
 
-  <section class="hours" id="hours"></section>
+  <section class="hours-wrap"><div class="hours" id="hours"></div><svg id="graph" viewBox="0 0 1000 100" preserveAspectRatio="none"></svg></section>
+  <div id="dim"></div>
   <div id="status"></div>
 
 <script>
@@ -160,15 +174,17 @@ setInterval(tickClock, 1000);
 async function load() {
   const url = "https://api.open-meteo.com/v1/forecast" +
     `?latitude=${CONFIG.lat}&longitude=${CONFIG.lon}` +
-    "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day" +
-    "&hourly=temperature_2m,weather_code,precipitation_probability,is_day" +
-    "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max" +
+    "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m,is_day" +
+    "&hourly=temperature_2m,weather_code,precipitation_probability,is_day,uv_index" +
+    "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset" +
+    "&minutely_15=precipitation&forecast_minutely_15=24" +
     `&temperature_unit=${CONFIG.units}&wind_speed_unit=${CONFIG.windUnit}` +
     "&timezone=auto&forecast_days=5";
   try {
     const r = await fetch(url);
     if (!r.ok) throw new Error("HTTP " + r.status);
     render(await r.json());
+    await loadAir();
     $("status").textContent = "Updated " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   } catch (e) {
     $("status").textContent = "Update failed, retrying. " + e.message;
@@ -184,13 +200,13 @@ function render(d) {
   $("meta").innerHTML =
     `<span>Feels like ${Math.round(c.apparent_temperature)}${unitSym}</span>` +
     `<span>Humidity ${c.relative_humidity_2m}%</span>` +
-    `<span>Wind ${Math.round(c.wind_speed_10m)} ${windLabel}</span>`;
+    `<span>Wind ${Math.round(c.wind_speed_10m)} ${windLabel} ${compass(c.wind_direction_10m)}</span>`;
 
   // Next 8 hours, starting from the current hour
   const now = c.time.slice(0, 13) + ":00";
   const start = Math.max(0, d.hourly.time.findIndex(t => t >= now));
-  $("hours").innerHTML = d.hourly.time.slice(start, start + 8).map((t, i) => {
-    const k = start + i;
+  $("hours").innerHTML = d.hourly.time.slice(start, start + 24).filter((_, i) => i % 3 === 0).map((t, i) => {
+    const k = start + i * 3;
     return `<div class="hour">
       <div class="h">${i === 0 ? "Now" : t.slice(11, 16)}</div>
       <div class="ic">${icon(d.hourly.weather_code[k], d.hourly.is_day[k])}</div>
@@ -210,7 +226,108 @@ function render(d) {
       <span><span class="lo">${Math.round(d.daily.temperature_2m_min[i])}°</span>&nbsp;&nbsp;<span class="hi">${Math.round(d.daily.temperature_2m_max[i])}°</span></span>
     </div>`;
   }).join("");
+  extras(d, c, start);
 }
+
+function compass(deg) {
+  const dir = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(deg / 45) % 8];
+  return `${dir}<svg class="arrow" viewBox="0 0 24 24" style="transform:rotate(${deg + 180}deg)"><path d="M12 3L19 20L12 16L5 20Z" fill="currentColor"/></svg>`;
+}
+
+function moon() {
+  const M = 29.530588853;
+  const p = ((((Date.now() - Date.UTC(2000, 0, 6, 18, 14)) / 86400000) % M) + M) % M / M;
+  const k = Math.cos(2 * Math.PI * p), os = p < 0.5 ? 1 : 0, is = k > 0 ? 1 - os : os, rx = 20 * Math.abs(k);
+  const svg = `<svg viewBox="0 0 48 48" style="width:8vh;height:8vh"><circle cx="24" cy="24" r="20" fill="#2a3548"/><path d="M24 4A20 20 0 0 ${os} 24 44A${rx} 20 0 0 ${is} 24 4z" fill="#f4f1de"/></svg>`;
+  const names = [[0.03, "New moon"], [0.22, "Waxing crescent"], [0.28, "First quarter"], [0.47, "Waxing gibbous"],
+    [0.53, "Full moon"], [0.72, "Waning gibbous"], [0.78, "Last quarter"], [0.97, "Waning crescent"], [1.01, "New moon"]];
+  return { svg, name: names.find(n => p < n[0])[1] };
+}
+
+function extras(d, c, start) {
+  const hm = str => str.slice(11, 16);
+  const dur = mins => mins >= 90 ? Math.round(mins / 60) + " hours" : mins + " min";
+
+  // UV pill
+  const uv = Math.round(d.hourly.uv_index[start] || 0);
+  const u = [[2, "Low", "#4ade80"], [5, "Moderate", "#facc15"], [7, "High", "#fb923c"], [10, "Very high", "#f87171"], [99, "Extreme", "#c084fc"]].find(x => uv <= x[0]);
+  $("meta").insertAdjacentHTML("beforeend", `<span><i class="dot" style="background:${u[2]}"></i>UV ${uv} ${u[1]}</span>`);
+
+  // Rain-soon line + what-to-wear line
+  const m = d.minutely_15, N = m.time.length;
+  const floor = c.time.slice(0, 14) + String(Math.floor(+c.time.slice(14, 16) / 15) * 15).padStart(2, "0");
+  const ni = Math.max(0, m.time.findIndex(t => t >= floor));
+  const wet = i => (m.precipitation[i] || 0) >= 0.1;
+  let j = ni, rain;
+  if (wet(ni)) {
+    while (j < N && wet(j)) j++;
+    rain = j >= N ? "Rain continuing for hours" : `Rain easing in about ${dur((j - ni) * 15)}`;
+  } else {
+    while (j < N && !wet(j)) j++;
+    rain = j >= N ? `Dry for the next ${Math.round((N - ni) / 4)} hours` : `Rain starting in about ${dur((j - ni) * 15)}`;
+  }
+  const fl = CONFIG.units === "fahrenheit" ? (c.apparent_temperature - 32) * 5 / 9 : c.apparent_temperature;
+  let wear = fl <= 0 ? "Bundle up: coat, hat and gloves" : fl <= 7 ? "Wear a warm coat" : fl <= 13 ? "A jacket is a good idea"
+    : fl <= 19 ? "A light layer will do" : fl <= 25 ? "T-shirt weather" : "Stay cool and drink water";
+  if (Math.max(...d.hourly.precipitation_probability.slice(start, start + 6)) >= 40) wear += "; take an umbrella";
+  if (uv >= 6 && c.is_day) wear += "; wear sunscreen";
+  $("tip").innerHTML = `<span>${rain}</span><span>${wear}</span>`;
+
+  // Sun arc by day, moon phase at night
+  const t = new Date(c.time), sr = new Date(d.daily.sunrise[0]), ss = new Date(d.daily.sunset[0]);
+  if (t >= sr && t <= ss) {
+    const th = Math.PI * (1 - (t - sr) / (ss - sr));
+    const x = 100 + 90 * Math.cos(th), y = 85 - 70 * Math.sin(th);
+    $("sun").innerHTML = `<div style="width:100%"><svg viewBox="0 0 200 95" style="width:100%;height:9vh"><path d="M10 85A90 70 0 0 1 190 85" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="2" stroke-dasharray="4 4"/><line x1="0" y1="85" x2="200" y2="85" stroke="rgba(255,255,255,.3)"/><circle cx="${x}" cy="${y}" r="7" fill="#ffc93c"/></svg><div class="times"><span>Sunrise ${hm(d.daily.sunrise[0])}</span><span>Sunset ${hm(d.daily.sunset[0])}</span></div></div>`;
+  } else {
+    const mn = moon(), rise = t < sr ? d.daily.sunrise[0] : d.daily.sunrise[1];
+    $("sun").innerHTML = `${mn.svg}<div><div>${mn.name}</div><div class="times">Sunrise ${hm(rise)}</div></div>`;
+  }
+
+  // 22-hour temperature curve under the hourly strip
+  const temps = d.hourly.temperature_2m.slice(start, start + 22);
+  const lo = Math.min(...temps), span = Math.max(Math.max(...temps) - lo, 1);
+  const pts = temps.map((v, i) => [(i / 3 + 0.5) / 8 * 1000, 88 - (v - lo) / span * 76]);
+  let path = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 1; i < pts.length; i++) {
+    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], mx = (x0 + x1) / 2;
+    path += `C${mx},${y0} ${mx},${y1} ${x1},${y1}`;
+  }
+  const end = pts[pts.length - 1];
+  $("graph").innerHTML = `<defs><linearGradient id="gf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb547" stop-opacity=".35"/><stop offset="1" stop-color="#ffb547" stop-opacity="0"/></linearGradient></defs><path d="${path}L${end[0]},100L${pts[0][0]},100Z" fill="url(#gf)"/><path d="${path}" fill="none" stroke="#ffb547" stroke-width="3" vector-effect="non-scaling-stroke"/>`;
+
+  // Dim the screen after dark
+  const hr = +c.time.slice(11, 13);
+  $("dim").style.opacity = c.is_day ? 0 : (hr >= 23 || hr < 6 ? 0.55 : 0.35);
+}
+
+async function loadAir() {
+  try {
+    const pol = ["alder", "birch", "grass", "mugwort", "olive", "ragweed"].map(x => x + "_pollen");
+    const r = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${CONFIG.lat}&longitude=${CONFIG.lon}&current=european_aqi,${pol.join(",")}&timezone=auto`);
+    if (!r.ok) return;
+    const c = (await r.json()).current;
+    let html = "";
+    if (c.european_aqi != null) {
+      const a = [[20, "Good", "#4ade80"], [40, "Fair", "#a3e635"], [60, "Moderate", "#facc15"], [80, "Poor", "#fb923c"], [100, "Very poor", "#f87171"], [999, "Extremely poor", "#c084fc"]].find(x => c.european_aqi <= x[0]);
+      html += `<span><i class="dot" style="background:${a[2]}"></i>Air ${a[1]}</span>`;
+    }
+    const vals = pol.map(k => c[k]).filter(v => v != null);
+    if (vals.length) {
+      const mx = Math.max(...vals), P = mx < 10 ? ["Low", "#4ade80"] : mx < 50 ? ["Moderate", "#facc15"] : mx < 200 ? ["High", "#fb923c"] : ["Very high", "#f87171"];
+      html += `<span><i class="dot" style="background:${P[1]}"></i>Pollen ${P[0]}</span>`;
+    }
+    $("meta").insertAdjacentHTML("beforeend", html);
+  } catch (e) { /* air quality is optional */ }
+}
+
+/* Screen care: reload at 3 am, nudge the layout every 5 minutes to avoid burn-in */
+setInterval(() => { const n = new Date(); if (n.getHours() === 3 && n.getMinutes() === 0) location.reload(); }, 60000);
+setInterval(() => {
+  const r = () => (Math.round(Math.random() * 12) - 6) + "px";
+  document.body.style.setProperty("--sx", r());
+  document.body.style.setProperty("--sy", r());
+}, 5 * 60 * 1000);
 
 /* ---------- Animated background ---------- */
 const sky = $("sky"), cv = $("fx"), ctx = cv.getContext("2d");
