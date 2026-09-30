@@ -9,7 +9,7 @@
     --bg: #0e1620;
     --panel: rgba(8, 18, 30, 0.5);
     --ink: #eef3f7;
-    --muted: #8fa3b5;
+    --muted: #d3deea;
     --accent: #ffb547;
     --rain: #5db7ff;
   }
@@ -35,7 +35,8 @@
   .now .icon { font-size: clamp(5rem, 16vw, 14rem); line-height: 1; }
   .now .temp { font-size: clamp(5rem, 14vw, 12rem); font-weight: 300; line-height: 1; margin-top: 1vh; }
   .now .desc { font-size: clamp(1.4rem, 3vw, 2.6rem); color: var(--accent); margin-top: 1vh; }
-  .now .meta { display: flex; gap: 2.5vw; margin-top: 2vh; color: var(--muted); font-size: clamp(1rem, 1.8vw, 1.6rem); flex-wrap: wrap; }
+  .now .meta { display: flex; gap: 1.2vw; margin-top: 2vh; color: var(--ink); font-size: clamp(1rem, 1.8vw, 1.6rem); flex-wrap: wrap; }
+  .now .meta span { background: var(--panel); padding: 0.6vh 1.2vw; border-radius: 999px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 
   .days { display: flex; flex-direction: column; gap: 1.2vh; justify-content: center; }
   .day {
@@ -59,6 +60,8 @@
   body { text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35); }
   .day { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
   .hour { border-top-color: rgba(255, 255, 255, 0.25); }
+  .wi { width: 1em; height: 1em; display: inline-block; vertical-align: middle; }
+  .now .icon .wi { display: block; }
   #status { position: fixed; right: 1vw; bottom: 0.6vh; font-size: 0.75rem; color: var(--muted); }
 
   @media (max-width: 800px) {
@@ -101,19 +104,44 @@ const CONFIG = {
 };
 /* ------------------------------------------ */
 
-const CODES = {
-  0: ["☀️", "Clear"], 1: ["🌤️", "Mostly clear"], 2: ["⛅", "Partly cloudy"], 3: ["☁️", "Overcast"],
-  45: ["🌫️", "Fog"], 48: ["🌫️", "Freezing fog"],
-  51: ["🌦️", "Light drizzle"], 53: ["🌦️", "Drizzle"], 55: ["🌧️", "Heavy drizzle"],
-  56: ["🌧️", "Freezing drizzle"], 57: ["🌧️", "Freezing drizzle"],
-  61: ["🌧️", "Light rain"], 63: ["🌧️", "Rain"], 65: ["🌧️", "Heavy rain"],
-  66: ["🌧️", "Freezing rain"], 67: ["🌧️", "Freezing rain"],
-  71: ["🌨️", "Light snow"], 73: ["🌨️", "Snow"], 75: ["❄️", "Heavy snow"], 77: ["🌨️", "Snow grains"],
-  80: ["🌦️", "Showers"], 81: ["🌧️", "Heavy showers"], 82: ["⛈️", "Violent showers"],
-  85: ["🌨️", "Snow showers"], 86: ["🌨️", "Heavy snow showers"],
-  95: ["⛈️", "Thunderstorm"], 96: ["⛈️", "Thunderstorm, hail"], 99: ["⛈️", "Thunderstorm, hail"]
+const TEXT = {
+  0: "Clear", 1: "Mostly clear", 2: "Partly cloudy", 3: "Overcast",
+  45: "Fog", 48: "Freezing fog",
+  51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle", 56: "Freezing drizzle", 57: "Freezing drizzle",
+  61: "Light rain", 63: "Rain", 65: "Heavy rain", 66: "Freezing rain", 67: "Freezing rain",
+  71: "Light snow", 73: "Snow", 75: "Heavy snow", 77: "Snow grains",
+  80: "Showers", 81: "Heavy showers", 82: "Violent showers", 85: "Snow showers", 86: "Heavy snow showers",
+  95: "Thunderstorm", 96: "Thunderstorm, hail", 99: "Thunderstorm, hail"
 };
-const wx = c => CODES[c] || ["❔", "Unknown"];
+const wx = c => TEXT[c] || "Unknown";
+
+/* Weather icons drawn as inline SVG, so they show on any device (no emoji font needed) */
+function icon(code, day = 1) {
+  const cloud = col => `<g fill="${col}"><circle cx="24" cy="38" r="9"/><circle cx="35" cy="31" r="12"/><circle cx="46" cy="38" r="8"/><rect x="24" y="38" width="22" height="9"/></g>`;
+  const sun = (x, y, r) => {
+    let rays = "";
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4, c = Math.cos(a), s = Math.sin(a);
+      rays += `<line x1="${x + c * (r + 4)}" y1="${y + s * (r + 4)}" x2="${x + c * (r + 9)}" y2="${y + s * (r + 9)}"/>`;
+    }
+    return `<g stroke="#ffc93c" stroke-width="3" stroke-linecap="round">${rays}</g><circle cx="${x}" cy="${y}" r="${r}" fill="#ffc93c"/>`;
+  };
+  const moon = `<path d="M38 12A20 20 0 1 0 54 42A16 16 0 0 1 38 12z" fill="#f4f1de"/>`;
+  const drops = n => `<g stroke="#5db7ff" stroke-width="3" stroke-linecap="round">` +
+    [26, 36, 46].slice(0, n).map(x => `<line x1="${x}" y1="50" x2="${x - 3}" y2="58"/>`).join("") + `</g>`;
+  const light = "#e8eef4", dark = "#a9b6c3";
+  let body;
+  if (code <= 1) body = day ? sun(32, 32, 12) : moon;
+  else if (code === 2) body = (day ? sun(24, 22, 8) : `<g transform="translate(-6,-8) scale(.7)">${moon}</g>`) + cloud(light);
+  else if (code === 3) body = cloud(light);
+  else if (code === 45 || code === 48) body = cloud(light) +
+    `<g stroke="#cfd8e1" stroke-width="3" stroke-linecap="round"><line x1="20" y1="52" x2="50" y2="52"/><line x1="26" y1="58" x2="44" y2="58"/></g>`;
+  else if ([71, 73, 75, 77, 85, 86].includes(code)) body = cloud(light) +
+    `<g fill="#ffffff"><circle cx="26" cy="53" r="2.8"/><circle cx="36" cy="57" r="2.8"/><circle cx="46" cy="53" r="2.8"/></g>`;
+  else if (code >= 95) body = cloud(dark) + `<polygon points="37,42 28,54 34,54 30,63 43,49 37,49 41,42" fill="#ffc93c"/>`;
+  else body = cloud(dark) + drops(code <= 57 ? 2 : 3);
+  return `<svg class="wi" viewBox="0 0 64 64" aria-hidden="true">${body}</svg>`;
+}
 const $ = id => document.getElementById(id);
 const unitSym = CONFIG.units === "fahrenheit" ? "°F" : "°C";
 const windLabel = { kmh: "km/h", mph: "mph", ms: "m/s", kn: "kn" }[CONFIG.windUnit];
@@ -133,7 +161,7 @@ async function load() {
   const url = "https://api.open-meteo.com/v1/forecast" +
     `?latitude=${CONFIG.lat}&longitude=${CONFIG.lon}` +
     "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day" +
-    "&hourly=temperature_2m,weather_code,precipitation_probability" +
+    "&hourly=temperature_2m,weather_code,precipitation_probability,is_day" +
     "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max" +
     `&temperature_unit=${CONFIG.units}&wind_speed_unit=${CONFIG.windUnit}` +
     "&timezone=auto&forecast_days=5";
@@ -148,8 +176,8 @@ async function load() {
 }
 
 function render(d) {
-  const c = d.current, [icon, text] = wx(c.weather_code);
-  $("icon").textContent = icon;
+  const c = d.current, text = wx(c.weather_code);
+  $("icon").innerHTML = icon(c.weather_code, c.is_day);
   setScene(c.weather_code, c.is_day);
   $("temp").textContent = Math.round(c.temperature_2m) + "°";
   $("desc").textContent = text;
@@ -165,7 +193,7 @@ function render(d) {
     const k = start + i;
     return `<div class="hour">
       <div class="h">${i === 0 ? "Now" : t.slice(11, 16)}</div>
-      <div class="ic">${wx(d.hourly.weather_code[k])[0]}</div>
+      <div class="ic">${icon(d.hourly.weather_code[k], d.hourly.is_day[k])}</div>
       <div>${Math.round(d.hourly.temperature_2m[k])}°</div>
       <div class="p">${d.hourly.precipitation_probability[k] >= 20 ? d.hourly.precipitation_probability[k] + "%" : ""}</div>
     </div>`;
@@ -177,7 +205,7 @@ function render(d) {
     const p = d.daily.precipitation_probability_max[i];
     return `<div class="day">
       <span>${name}</span>
-      <span class="ic">${wx(d.daily.weather_code[i])[0]}</span>
+      <span class="ic">${icon(d.daily.weather_code[i], 1)}</span>
       <span class="rain">${p >= 20 ? p + "%" : ""}</span>
       <span><span class="lo">${Math.round(d.daily.temperature_2m_min[i])}°</span>&nbsp;&nbsp;<span class="hi">${Math.round(d.daily.temperature_2m_max[i])}°</span></span>
     </div>`;
