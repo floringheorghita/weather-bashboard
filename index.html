@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weather Dashboard</title>
+<style>
+  :root {
+    --bg: #0e1620;
+    --panel: #16222f;
+    --ink: #eef3f7;
+    --muted: #8fa3b5;
+    --accent: #ffb547;
+    --rain: #5db7ff;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Avenir Next", "Segoe UI", Helvetica, Arial, sans-serif;
+    padding: 2.5vh 3vw;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 2.5vh;
+    overflow: hidden;
+  }
+  header { display: flex; justify-content: space-between; align-items: baseline; }
+  #place { font-size: clamp(1.4rem, 3vw, 2.6rem); font-weight: 600; }
+  #clock { font-size: clamp(1.4rem, 3vw, 2.6rem); font-variant-numeric: tabular-nums; color: var(--muted); }
+  #clock small { font-size: 0.55em; margin-left: 0.6em; }
+
+  main { display: grid; grid-template-columns: 1.1fr 1fr; gap: 3vw; min-height: 0; }
+  .now { display: flex; flex-direction: column; justify-content: center; }
+  .now .icon { font-size: clamp(5rem, 16vw, 14rem); line-height: 1; }
+  .now .temp { font-size: clamp(5rem, 14vw, 12rem); font-weight: 300; line-height: 1; margin-top: 1vh; }
+  .now .desc { font-size: clamp(1.4rem, 3vw, 2.6rem); color: var(--accent); margin-top: 1vh; }
+  .now .meta { display: flex; gap: 2.5vw; margin-top: 2vh; color: var(--muted); font-size: clamp(1rem, 1.8vw, 1.6rem); flex-wrap: wrap; }
+
+  .days { display: flex; flex-direction: column; gap: 1.2vh; justify-content: center; }
+  .day {
+    display: grid; grid-template-columns: 1.2fr 0.8fr 1fr 1fr; align-items: center;
+    background: var(--panel); border-radius: 14px; padding: 1.4vh 1.6vw;
+    font-size: clamp(1rem, 2vw, 1.8rem);
+  }
+  .day .ic { font-size: 1.6em; }
+  .day .rain { color: var(--rain); }
+  .day .lo { color: var(--muted); text-align: right; }
+  .day .hi { text-align: right; font-weight: 600; }
+
+  .hours { display: grid; grid-template-columns: repeat(8, 1fr); gap: 1vw; }
+  .hour { text-align: center; padding: 1.2vh 0; border-top: 2px solid var(--panel); font-size: clamp(0.9rem, 1.6vw, 1.5rem); }
+  .hour .h { color: var(--muted); }
+  .hour .ic { font-size: 1.7em; margin: 0.3vh 0; }
+  .hour .p { color: var(--rain); font-size: 0.85em; min-height: 1.2em; }
+
+  #status { position: fixed; right: 1vw; bottom: 0.6vh; font-size: 0.75rem; color: var(--muted); }
+
+  @media (max-width: 800px) {
+    body { overflow: auto; }
+    main { grid-template-columns: 1fr; }
+    .hours { grid-template-columns: repeat(4, 1fr); }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div id="place"></div>
+    <div id="clock"></div>
+  </header>
+
+  <main>
+    <section class="now">
+      <div class="icon" id="icon">…</div>
+      <div class="temp" id="temp">--°</div>
+      <div class="desc" id="desc">Loading</div>
+      <div class="meta" id="meta"></div>
+    </section>
+    <section class="days" id="days"></section>
+  </main>
+
+  <section class="hours" id="hours"></section>
+  <div id="status"></div>
+
+<script>
+/* ---------- Settings: edit these ---------- */
+const CONFIG = {
+  name: "Paris",          // label shown at the top
+  lat: 48.8566,           // latitude  (round it if the repo is public)
+  lon: 2.3522,            // longitude
+  units: "celsius",       // "celsius" or "fahrenheit"
+  windUnit: "kmh",        // "kmh", "mph", "ms" or "kn"
+  refreshMinutes: 10
+};
+/* ------------------------------------------ */
+
+const CODES = {
+  0: ["☀️", "Clear"], 1: ["🌤️", "Mostly clear"], 2: ["⛅", "Partly cloudy"], 3: ["☁️", "Overcast"],
+  45: ["🌫️", "Fog"], 48: ["🌫️", "Freezing fog"],
+  51: ["🌦️", "Light drizzle"], 53: ["🌦️", "Drizzle"], 55: ["🌧️", "Heavy drizzle"],
+  56: ["🌧️", "Freezing drizzle"], 57: ["🌧️", "Freezing drizzle"],
+  61: ["🌧️", "Light rain"], 63: ["🌧️", "Rain"], 65: ["🌧️", "Heavy rain"],
+  66: ["🌧️", "Freezing rain"], 67: ["🌧️", "Freezing rain"],
+  71: ["🌨️", "Light snow"], 73: ["🌨️", "Snow"], 75: ["❄️", "Heavy snow"], 77: ["🌨️", "Snow grains"],
+  80: ["🌦️", "Showers"], 81: ["🌧️", "Heavy showers"], 82: ["⛈️", "Violent showers"],
+  85: ["🌨️", "Snow showers"], 86: ["🌨️", "Heavy snow showers"],
+  95: ["⛈️", "Thunderstorm"], 96: ["⛈️", "Thunderstorm, hail"], 99: ["⛈️", "Thunderstorm, hail"]
+};
+const wx = c => CODES[c] || ["❔", "Unknown"];
+const $ = id => document.getElementById(id);
+const unitSym = CONFIG.units === "fahrenheit" ? "°F" : "°C";
+const windLabel = { kmh: "km/h", mph: "mph", ms: "m/s", kn: "kn" }[CONFIG.windUnit];
+
+$("place").textContent = CONFIG.name;
+
+function tickClock() {
+  const d = new Date();
+  $("clock").innerHTML =
+    d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) +
+    "<small>" + d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" }) + "</small>";
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+async function load() {
+  const url = "https://api.open-meteo.com/v1/forecast" +
+    `?latitude=${CONFIG.lat}&longitude=${CONFIG.lon}` +
+    "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m" +
+    "&hourly=temperature_2m,weather_code,precipitation_probability" +
+    "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max" +
+    `&temperature_unit=${CONFIG.units}&wind_speed_unit=${CONFIG.windUnit}` +
+    "&timezone=auto&forecast_days=5";
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    render(await r.json());
+    $("status").textContent = "Updated " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch (e) {
+    $("status").textContent = "Update failed, retrying. " + e.message;
+  }
+}
+
+function render(d) {
+  const c = d.current, [icon, text] = wx(c.weather_code);
+  $("icon").textContent = icon;
+  $("temp").textContent = Math.round(c.temperature_2m) + "°";
+  $("desc").textContent = text;
+  $("meta").innerHTML =
+    `<span>Feels like ${Math.round(c.apparent_temperature)}${unitSym}</span>` +
+    `<span>Humidity ${c.relative_humidity_2m}%</span>` +
+    `<span>Wind ${Math.round(c.wind_speed_10m)} ${windLabel}</span>`;
+
+  // Next 8 hours, starting from the current hour
+  const now = c.time.slice(0, 13) + ":00";
+  const start = Math.max(0, d.hourly.time.findIndex(t => t >= now));
+  $("hours").innerHTML = d.hourly.time.slice(start, start + 8).map((t, i) => {
+    const k = start + i;
+    return `<div class="hour">
+      <div class="h">${i === 0 ? "Now" : t.slice(11, 16)}</div>
+      <div class="ic">${wx(d.hourly.weather_code[k])[0]}</div>
+      <div>${Math.round(d.hourly.temperature_2m[k])}°</div>
+      <div class="p">${d.hourly.precipitation_probability[k] >= 20 ? d.hourly.precipitation_probability[k] + "%" : ""}</div>
+    </div>`;
+  }).join("");
+
+  // 5-day forecast
+  $("days").innerHTML = d.daily.time.map((t, i) => {
+    const name = i === 0 ? "Today" : new Date(t + "T12:00").toLocaleDateString([], { weekday: "long" });
+    const p = d.daily.precipitation_probability_max[i];
+    return `<div class="day">
+      <span>${name}</span>
+      <span class="ic">${wx(d.daily.weather_code[i])[0]}</span>
+      <span class="rain">${p >= 20 ? p + "%" : ""}</span>
+      <span><span class="lo">${Math.round(d.daily.temperature_2m_min[i])}°</span>&nbsp;&nbsp;<span class="hi">${Math.round(d.daily.temperature_2m_max[i])}°</span></span>
+    </div>`;
+  }).join("");
+}
+
+load();
+setInterval(load, CONFIG.refreshMinutes * 60 * 1000);
+</script>
+</body>
+</html>
